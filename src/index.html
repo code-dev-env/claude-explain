@@ -1,158 +1,230 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8">
-<title>Claude Explain</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'">
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-<div class="bg"><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i></div>
+  <head>
+    <meta charset="utf-8" />
+    <title>Claude Explain</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg">
+      <i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i>
+    </div>
 
-<header class="top">
-  <div class="logo"><span class="mark">✦</span><b>Claude</b> Explain</div>
-  <div id="fileChip" class="chip file" hidden><span id="fileLang" class="dot"></span><span id="fileName"></span></div>
-  <div class="spacer"></div>
+    <header class="top">
+      <div class="logo"><span class="mark">✦</span><b>Claude</b> Explain</div>
+      <div id="fileChip" class="chip file" hidden>
+        <span id="fileLang" class="dot"></span><span id="fileName"></span>
+      </div>
+      <div class="spacer"></div>
 
-  <div id="runStats" class="stats" hidden>
-    <div class="pill" title="Total time from sending the file to the finished analysis"><span class="ic">⏱</span><b id="stTime">–</b><small>time</small></div>
-    <div class="pill" id="stInPill"><span class="ic">↓</span><b id="stIn">–</b><small>tokens in</small></div>
-    <div class="pill"><span class="ic">↑</span><b id="stOut">–</b><small>tokens out</small></div>
-    <div class="pill" id="stModelPill"><span class="ic">◈</span><b id="stModel">–</b></div>
-  </div>
-
-  <div id="hdrOpts" class="hdropts" hidden>
-    <select id="hdrMode" title="Analysis mode"><option value="full">Full</option><option value="quick">⚡ Quick</option></select>
-    <select id="hdrDetail" title="Explanation detail"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="expert">Expert</option></select>
-  </div>
-  <button id="openBtn" class="btn primary">Open file</button>
-  <button id="againBtn" class="btn" hidden>Re-analyze</button>
-  <button id="themeBtn" class="btn icon" title="Toggle theme">◐</button>
-  <button id="settingsBtn" class="btn icon" title="Settings">⚙</button>
-</header>
-
-<!-- Landing -->
-<section id="landing" class="view">
-  <div class="hero">
-    <div class="orb"></div>
-    <h1>Understand any code,<br><span class="grad">at a glance.</span></h1>
-    <p>Drop a source file and get a clear explanation, a step-by-step walkthrough and live diagrams of how it works.</p>
-    <div class="opts">
-      <div class="optgrp">
-        <label>Mode</label>
-        <div class="seg" id="modeSeg">
-          <button data-mode="full" class="on" type="button">Full analysis</button>
-          <button data-mode="quick" type="button">⚡ Quick</button>
+      <div id="runStats" class="stats" hidden>
+        <div
+          class="pill"
+          title="Total time from sending the file to the finished analysis"
+        >
+          <span class="ic">⏱</span><b id="stTime">–</b><small>time</small>
+        </div>
+        <div class="pill" id="stInPill">
+          <span class="ic">↓</span><b id="stIn">–</b><small>tokens in</small>
+        </div>
+        <div class="pill">
+          <span class="ic">↑</span><b id="stOut">–</b><small>tokens out</small>
+        </div>
+        <div class="pill" id="stModelPill">
+          <span class="ic">◈</span><b id="stModel">–</b>
         </div>
       </div>
-      <div class="optgrp">
-        <label>Explanation detail</label>
-        <select id="landDetail">
-          <option value="beginner">Beginner friendly</option>
-          <option value="intermediate">Intermediate</option>
-          <option value="expert">Expert / concise</option>
+
+      <button id="openBtn" class="btn primary">Open file</button>
+      <button
+        id="againBtn"
+        class="btn"
+        hidden
+        title="Go back to the start page to change the request or options"
+      >
+        Re-analyze
+      </button>
+      <button id="themeBtn" class="btn icon" title="Toggle theme">◐</button>
+      <button id="settingsBtn" class="btn icon" title="Settings">⚙</button>
+    </header>
+
+    <!-- Landing -->
+    <section id="landing" class="view">
+      <div class="hero">
+        <div class="orb"></div>
+        <h1>
+          Understand any code,<br /><span class="grad">at a glance.</span>
+        </h1>
+        <p>
+          Drop a source file and get a clear explanation, a step-by-step
+          walkthrough and live diagrams of how it works.
+        </p>
+        <div class="opts">
+          <div class="optgrp">
+            <label>Mode</label>
+            <div class="seg" id="modeSeg">
+              <button data-mode="full" class="on" type="button">
+                Full analysis
+              </button>
+              <button data-mode="quick" type="button">⚡ Quick</button>
+            </div>
+          </div>
+          <div class="optgrp">
+            <label>Explanation detail</label>
+            <select id="landDetail">
+              <option value="beginner">Beginner friendly</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="expert">Expert / concise</option>
+            </select>
+          </div>
+        </div>
+        <div id="modeHint" class="modehint"></div>
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <div class="dz-icon">⬆</div>
+          <div>
+            <b id="dzTitle">Drag &amp; drop a source file</b
+            ><span id="dzSub">or click to browse</span>
+          </div>
+        </div>
+        <div class="ask">
+          <textarea
+            id="askInput"
+            rows="2"
+            maxlength="600"
+            placeholder="Optional: tell Claude what you want, e.g. “Overview only”, “Show me only the flowchart”, “Explain line by line”. Leave blank for the default analysis."
+          ></textarea>
+          <button id="goBtn" class="btn primary" disabled>Analyze</button>
+        </div>
+        <div class="langs">
+          Python · JavaScript · TypeScript · C / C++ · C# · Java · Go · Rust ·
+          SQL · PowerShell · and more
+        </div>
+      </div>
+    </section>
+
+    <!-- Loading -->
+    <section id="loading" class="view" hidden>
+      <div class="loadwrap">
+        <div class="spinner"><i></i><i></i><i></i></div>
+        <h2>Reading <span id="loadFile"></span></h2>
+        <div class="live">
+          <b id="liveTime">0.0s</b><span>·</span><b id="liveTok">0</b> tokens
+          generated
+        </div>
+        <ul id="stages" class="stages"></ul>
+        <button id="cancelBtn" class="btn">Cancel</button>
+      </div>
+    </section>
+
+    <!-- Error -->
+    <section id="errorView" class="view" hidden>
+      <div class="errcard">
+        <div class="eicon">!</div>
+        <h2>Something went wrong</h2>
+        <p id="errMsg"></p>
+        <pre id="errRaw" hidden></pre>
+        <div class="row">
+          <button id="errRetry" class="btn primary">Try again</button
+          ><button id="errSettings" class="btn">Open settings</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Result -->
+    <section id="result" class="view split" hidden>
+      <aside id="codePane" class="code">
+        <div class="code-head">
+          <b>Source</b><span id="codeMeta" class="muted"></span>
+          <span class="spacer"></span>
+          <button id="clearHl" class="mini" hidden>Clear highlight</button>
+        </div>
+        <div id="codeBody" class="code-body"></div>
+      </aside>
+      <div id="resizer"></div>
+      <main class="dash">
+        <nav class="tabs" id="tabs">
+          <button data-tab="overview" class="on">Overview</button>
+          <button data-tab="walkthrough">Walkthrough</button>
+          <button data-tab="diagrams">Diagrams</button>
+          <button data-tab="components">Components</button>
+        </nav>
+        <div id="tabBody" class="tabbody"></div>
+      </main>
+    </section>
+
+    <div id="dropOverlay" hidden><div>Drop to analyze</div></div>
+
+    <div id="settingsModal" class="modal" hidden>
+      <div class="card">
+        <h3>Settings</h3>
+        <label>Connection</label>
+        <select id="modeInput">
+          <option value="claude-code">
+            Claude Code (uses your existing login)
+          </option>
+          <option value="api">Anthropic API key</option>
         </select>
+        <label
+          >Claude Code path
+          <span class="muted"
+            >(only if it isn't found automatically)</span
+          ></label
+        >
+        <input id="cliInput" placeholder="C:\Users\you\.local\bin\claude.exe" />
+        <label
+          >Anthropic API key <span id="keyState" class="muted"></span>
+          <span class="muted">(optional fallback)</span></label
+        >
+        <input
+          id="keyInput"
+          type="password"
+          placeholder="sk-ant-… (leave blank to keep current)"
+        />
+        <label>Model</label>
+        <input id="modelInput" list="models" />
+        <datalist id="models">
+          <option value="claude-sonnet-5-5"></option>
+          <option value="claude-opus-5-5"></option>
+          <option value="claude-fable-5-1"></option>
+          <option value="claude-haiku-5-5"></option>
+        </datalist>
+        <p class="muted small">
+          Settings are saved in a file next to the exe. Files you open are sent
+          to Claude.
+        </p>
+        <div class="row end">
+          <button id="settingsCancel" type="button" class="btn">Cancel</button
+          ><button id="settingsSave" type="button" class="btn primary">
+            Save
+          </button>
+        </div>
       </div>
     </div>
-    <div id="modeHint" class="modehint"></div>
-    <div id="dropzone" class="dropzone" tabindex="0">
-      <div class="dz-icon">⬆</div>
-      <div><b>Drag &amp; drop a source file</b><span>or click to browse</span></div>
+
+    <div id="zoomModal" class="modal" hidden>
+      <div id="zoomWin">
+        <div class="zhead">
+          <b id="zoomTitle">Diagram</b
+          ><span class="muted small">Scroll to zoom · drag to pan</span>
+          <span class="spacer"></span>
+          <span id="zoomPct" class="muted small">100%</span>
+          <button id="zOut" class="mini" title="Zoom out">−</button>
+          <button id="zIn" class="mini" title="Zoom in">+</button>
+          <button id="zFit" class="mini" title="Fit to window">Fit</button>
+          <button id="z100" class="mini" title="Actual size">100%</button>
+          <button id="zClose" class="mini" title="Close">✕</button>
+        </div>
+        <div id="zoomCanvas"></div>
+      </div>
     </div>
-    <div class="langs">Python · JavaScript · TypeScript · C / C++ · C# · Java · Go · Rust · SQL · PowerShell · and more</div>
-  </div>
-</section>
 
-<!-- Loading -->
-<section id="loading" class="view" hidden>
-  <div class="loadwrap">
-    <div class="spinner"><i></i><i></i><i></i></div>
-    <h2>Reading <span id="loadFile"></span></h2>
-    <div class="live"><b id="liveTime">0.0s</b><span>·</span><b id="liveTok">0</b> tokens generated</div>
-    <ul id="stages" class="stages"></ul>
-    <button id="cancelBtn" class="btn">Cancel</button>
-  </div>
-</section>
-
-<!-- Error -->
-<section id="errorView" class="view" hidden>
-  <div class="errcard">
-    <div class="eicon">!</div>
-    <h2>Something went wrong</h2>
-    <p id="errMsg"></p>
-    <pre id="errRaw" hidden></pre>
-    <div class="row"><button id="errRetry" class="btn primary">Try again</button><button id="errSettings" class="btn">Open settings</button></div>
-  </div>
-</section>
-
-<!-- Result -->
-<section id="result" class="view split" hidden>
-  <aside id="codePane" class="code">
-    <div class="code-head">
-      <b>Source</b><span id="codeMeta" class="muted"></span>
-      <span class="spacer"></span>
-      <button id="clearHl" class="mini" hidden>Clear highlight</button>
-    </div>
-    <div id="codeBody" class="code-body"></div>
-  </aside>
-  <div id="resizer"></div>
-  <main class="dash">
-    <nav class="tabs" id="tabs">
-      <button data-tab="overview" class="on">Overview</button>
-      <button data-tab="walkthrough">Walkthrough</button>
-      <button data-tab="diagrams">Diagrams</button>
-      <button data-tab="components">Components</button>
-    </nav>
-    <div id="tabBody" class="tabbody"></div>
-  </main>
-</section>
-
-<div id="dropOverlay" hidden><div>Drop to analyze</div></div>
-
-<div id="settingsModal" class="modal" hidden>
-  <div class="card">
-    <h3>Settings</h3>
-    <label>Connection</label>
-    <select id="modeInput">
-      <option value="claude-code">Claude Code (uses your existing login)</option>
-      <option value="api">Anthropic API key</option>
-    </select>
-    <label>Claude Code path <span class="muted">(only if it isn't found automatically)</span></label>
-    <input id="cliInput" placeholder="C:\Users\you\.local\bin\claude.exe">
-    <label>Anthropic API key <span id="keyState" class="muted"></span> <span class="muted">(optional fallback)</span></label>
-    <input id="keyInput" type="password" placeholder="sk-ant-… (leave blank to keep current)">
-    <label>Model</label>
-    <input id="modelInput" list="models">
-    <datalist id="models">
-      <option value="claude-sonnet-5-5"></option>
-      <option value="claude-opus-5-5"></option>
-      <option value="claude-fable-5-1"></option>
-      <option value="claude-haiku-5-5"></option>
-    </datalist>
-    <p class="muted small">Settings are saved in a file next to the exe. Files you open are sent to Claude.</p>
-    <div class="row end"><button id="settingsCancel" type="button" class="btn">Cancel</button><button id="settingsSave" type="button" class="btn primary">Save</button></div>
-  </div>
-</div>
-
-<div id="zoomModal" class="modal" hidden>
-  <div id="zoomWin">
-    <div class="zhead">
-      <b id="zoomTitle">Diagram</b><span class="muted small">Scroll to zoom · drag to pan</span>
-      <span class="spacer"></span>
-      <span id="zoomPct" class="muted small">100%</span>
-      <button id="zOut" class="mini" title="Zoom out">−</button>
-      <button id="zIn" class="mini" title="Zoom in">+</button>
-      <button id="zFit" class="mini" title="Fit to window">Fit</button>
-      <button id="z100" class="mini" title="Actual size">100%</button>
-      <button id="zClose" class="mini" title="Close">✕</button>
-    </div>
-    <div id="zoomCanvas"></div>
-  </div>
-</div>
-
-<script src="analyze.js"></script>
-<script src="diagrams.js"></script>
-<script src="renderer.js"></script>
-</body>
+    <script src="analyze.js"></script>
+    <script src="diagrams.js"></script>
+    <script src="renderer.js"></script>
+  </body>
 </html>

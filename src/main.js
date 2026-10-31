@@ -7,26 +7,54 @@ const { spawn } = require("child_process");
 const MAX_FILE_BYTES = 400 * 1024;
 
 // Keep settings next to the portable exe when possible, otherwise in userData.
-function settingsPath() {
-  const dir = process.env.PORTABLE_EXECUTABLE_DIR || app.getPath("userData");
-  return path.join(dir, "claude-explain-settings.json");
+const SETTINGS_FILE = "claude-explain-settings.json";
+// Preferred location first; userData is the fallback when the exe folder is read-only.
+function settingsPaths() {
+  const dirs = [process.env.PORTABLE_EXECUTABLE_DIR, app.getPath("userData")];
+  return [...new Set(dirs.filter(Boolean))].map((d) => path.join(d, SETTINGS_FILE));
 }
+const DEFAULT_MODEL = "claude-sonnet-5-5";
+const AUTO = "auto"; // "Automatic": Claude decides, see routeModel()
+// The model picked for this run wins, then the Settings default. May be AUTO.
+function pickModel(s, req) {
+  return req.model || s.model || DEFAULT_MODEL;
+}
+
+// Shown when the live list is unavailable (the CLI has no way to list models).
+const FALLBACK_MODELS = [
+  { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5" },
+  { id: "claude-opus-5-5", name: "Claude Opus 5.5" },
+  { id: "claude-fable-5-1", name: "Claude Fable 5.1" },
+  { id: "claude-haiku-5-5", name: "Claude Haiku 5.5" },
+];
+let modelsCache = null;
+
+let settingsCache = null;
 function loadSettings() {
-  try {
-    return JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
-  } catch {
-    return {};
+  if (settingsCache) return settingsCache;
+  settingsCache = {};
+  for (const p of settingsPaths()) {
+    try {
+      settingsCache = JSON.parse(fs.readFileSync(p, "utf8"));
+      break;
+    } catch {}
   }
+  return settingsCache;
 }
 function saveSettings(s) {
-  try {
-    fs.writeFileSync(settingsPath(), JSON.stringify(s, null, 2));
-  } catch {
-    fs.writeFileSync(
-      path.join(app.getPath("userData"), "claude-explain-settings.json"),
-      JSON.stringify(s, null, 2),
-    );
+  settingsCache = s;
+  const text = JSON.stringify(s, null, 2);
+  let lastErr;
+  for (const p of settingsPaths()) {
+    try {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, text);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
   }
+  throw lastErr;
 }
 
 let win;
@@ -39,7 +67,9 @@ function createWindow() {
     height: 860,
     minWidth: 800,
     minHeight: 600,
-    backgroundColor: "#1e1e24",
+    show: false,
+    backgroundColor:
+      (loadSettings().prefs || {}).theme === "light" ? "#f3f4fb" : "#0b0c14",
     title: "Claude Explain",
     icon: path.join(__dirname, "..", "build", "icon.png"),
     autoHideMenuBar: true,
@@ -49,6 +79,7 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  win.once("ready-to-show", () => win.show());
   win.removeMenu();
   win.loadFile(path.join(__dirname, "index.html"));
   // Dropped files must never navigate the window.
@@ -84,7 +115,38 @@ function publicSettings(s) {
   };
 }
 ipcMain.handle("settings:get", () => publicSettings(loadSettings()));
+// UI preferences (theme, mode, detail, model) live in the same file; sync so they apply before first paint.
+ipcMain.on("prefs:get", (e) => {
+  e.returnValue = loadSettings().prefs || null;
+});
+ipcMain.on("prefs:set", (_e, patch) => {
+  const s = loadSettings();
+  try {
+    saveSettings({ ...s, prefs: { ...s.prefs, ...patch } });
+  } catch {}
+});
+// With an API key the list comes live from the API, so new models appear automatically.
+ipcMain.handle("models:list", async () => {
+  if (modelsCache) return modelsCache;
+  const apiKey = loadSettings().apiKey || process.env.ANTHROPIC_API_KEY;
+  if (apiKey) {
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      });
+      if (res.ok) {
+        const list = ((await res.json()).data || []).map((m) => ({
+          id: m.id,
+          name: m.display_name || m.id,
+        }));
+        if (list.length) return (modelsCache = list);
+      }
+    } catch {}
+  }
+  return FALLBACK_MODELS;
+});
 ipcMain.handle("settings:set", (_e, patch) => {
+  if ("apiKey" in patch) modelsCache = null;
   const s = { ...loadSettings(), ...patch };
   if (patch.apiKey === "") delete s.apiKey;
   if (!s.cliPath) delete s.cliPath;
@@ -132,7 +194,8 @@ function cliCandidates(s) {
 }
 
 // Uses the locally installed, already logged-in Claude Code CLI.
-function streamCli({ id, system, messages }, s, send) {
+function streamCli(req, s, send) {
+  const { id, system, messages } = req;
   return new Promise((resolve) => {
     const args = [
       "-p",
@@ -147,7 +210,9 @@ function streamCli({ id, system, messages }, s, send) {
       "--system-prompt",
       system,
     ];
-    if (s.model) args.push("--model", s.model);
+    // Automatic: leave --model out so Claude Code chooses its own model.
+    const model = pickModel(s, req);
+    if (model !== AUTO) args.push("--model", model);
     const candidates = cliCandidates(s);
     let started = false,
       gotText = false;
@@ -242,10 +307,49 @@ function streamCli({ id, system, messages }, s, send) {
   });
 }
 
+// Automatic model choice for the API: a tiny Haiku call picks a model for this task.
+// Any failure falls back to the default model, so a run is never blocked by routing.
+async function routeModel(apiKey, req) {
+  const ids = (modelsCache || FALLBACK_MODELS).map((m) => m.id).slice(0, 12);
+  const fallback = ids.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : ids[0];
+  const router = ids.find((i) => /haiku/i.test(i)) || fallback;
+  const task = req.messages[req.messages.length - 1].content;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: router,
+        max_tokens: 30,
+        system:
+          "You choose which Claude model should handle a code-explanation task. Pick the smallest model that will do it well: Haiku for short or simple files and quick summaries, Sonnet for typical files, Opus or Fable for large, intricate or high-risk code and detailed expert answers. Prefer the newest version of a family. Reply with exactly one model id from the list and nothing else.",
+        messages: [
+          {
+            role: "user",
+            content: `Models: ${ids.join(", ")}\nSummary mode: ${req.mode || "full"}; detail: ${req.detail || "intermediate"}; chat turns: ${req.messages.length}; task size: ${task.length} characters.\nTask start:\n${task.slice(0, 1500)}`,
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return fallback;
+    const text = (await res.json()).content?.[0]?.text || "";
+    return ids.find((i) => text.includes(i)) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // Direct Anthropic API call with an API key (optional fallback).
-async function streamApi({ id, system, messages }, s, send) {
+async function streamApi(req, s, send) {
+  const { id, system, messages } = req;
   const apiKey = s.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { error: "No API key set." };
+  let model = pickModel(s, req);
+  if (model === AUTO) model = await routeModel(apiKey, req);
   const meta = { source: "API key" };
   const ac = new AbortController();
   inflight.set(id, ac);
@@ -259,7 +363,7 @@ async function streamApi({ id, system, messages }, s, send) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: s.model || "claude-sonnet-5-5",
+        model,
         max_tokens: 16000,
         stream: true,
         system,

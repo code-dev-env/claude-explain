@@ -82,6 +82,10 @@
               <option value="expert">Expert / concise</option>
             </select>
           </div>
+          <div class="optgrp">
+            <label>Model</label>
+            <select id="landModel"></select>
+          </div>
         </div>
         <div id="modeHint" class="modehint"></div>
         <div id="dropzone" class="dropzone" tabindex="0">
@@ -115,6 +119,11 @@
         <div class="live">
           <b id="liveTime">0.0s</b><span>·</span><b id="liveTok">0</b> tokens
           generated
+        </div>
+        <div id="livePreview" class="livepreview" hidden>
+          <h3 id="lpTitle"></h3>
+          <div id="lpTag" class="tag"></div>
+          <p id="lpOverview"></p>
         </div>
         <ul id="stages" class="stages"></ul>
         <button id="cancelBtn" class="btn">Cancel</button>
@@ -186,13 +195,7 @@
           placeholder="sk-ant-… (leave blank to keep current)"
         />
         <label>Model</label>
-        <input id="modelInput" list="models" />
-        <datalist id="models">
-          <option value="claude-sonnet-5-5"></option>
-          <option value="claude-opus-5-5"></option>
-          <option value="claude-fable-5-1"></option>
-          <option value="claude-haiku-5-5"></option>
-        </datalist>
+        <select id="modelInput"></select>
         <p class="muted small">
           Settings are saved in a file next to the exe. Files you open are sent
           to Claude.

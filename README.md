@@ -12,10 +12,12 @@ An AI-driven desktop utility that uses Claude to explain source code. Drop in a 
 - **Structured explanation.** Results are organised into four tabs: *Overview*, *Walkthrough*, *Diagrams* and *Components*.
 - **Generated diagrams.** Flowcharts, call graphs and sequence diagrams are drawn by a built-in SVG engine, with no external diagramming dependency. Diagrams open in a viewer with zoom, pan and fit-to-window.
 - **Source cross-referencing.** Walkthrough steps, components and diagram nodes link back to line ranges in the source pane.
+- **Custom requests.** Type what you want to know, for example "Show me only the flowchart", instead of running the default analysis.
 - **Adjustable depth.** Choose *Full* or *Quick* analysis, and a *Beginner*, *Intermediate* or *Expert* level of detail.
 - **Local static analysis.** Language detection and code, comment and blank line counts are computed locally, without AI.
 - **Streaming output** with live token and timing statistics, and the ability to cancel a run.
 - **Two ways to connect to Claude:** your existing [Claude Code](https://docs.claude.com/en/docs/claude-code) login, or an Anthropic API key.
+- **Model choice.** Pick the model for each run on the start screen. With an API key the list is loaded live from the API, and *Automatic* lets a small Haiku call choose a model that suits the file (with Claude Code, Automatic uses the CLI's own default model).
 - **Light and dark themes.**
 
 ## Requirements
@@ -35,13 +37,15 @@ npm install
 npm start
 ```
 
-### Building a portable executable
+### Building
 
 ```bash
-npm run dist
+npm run dist             # installer and portable exe
+npm run dist:installer   # installer only
+npm run dist:portable    # portable exe only
 ```
 
-This produces a single portable `Claude-Explain.exe` in the `dist/` directory. It needs no installer.
+Output goes to `dist/`: `Claude-Explain-Setup-<version>.exe` (installer, lets you pick the install folder) and `Claude-Explain-Portable-<version>.exe` (portable, no installation needed).
 
 ## Usage
 
@@ -61,13 +65,13 @@ Open **Settings** (the gear icon) to configure the connection.
 | Connection | `Claude Code` (uses your existing login) or `Anthropic API key`. |
 | Claude Code path | Only needed if the `claude` executable is not found automatically. |
 | Anthropic API key | Used in API mode, and as a fallback if Claude Code is unavailable. May also be supplied through the `ANTHROPIC_API_KEY` environment variable. |
-| Model | The Claude model ID to use. The default is `claude-sonnet-5-5`. |
+| Model | The default Claude model ID. The default is `claude-sonnet-5-5`. You can also choose a model, or *Automatic*, for each run on the start screen. |
 
-Settings are stored in `claude-explain-settings.json`, next to the portable executable when possible and in the app's user-data directory otherwise. If you enter an API key it is saved there in plain text, so keep that file private.
+Settings, along with your theme, mode, detail level and model choice, are stored in `claude-explain-settings.json`, next to the portable executable when possible and in the app's user-data directory otherwise. If you enter an API key it is saved there in plain text, so keep that file private.
 
 ## Privacy
 
-Files you open are sent to Claude for analysis, through Claude Code or directly to the Anthropic API depending on your configuration. Do not analyse files containing secrets or code you are not permitted to share with a third-party service. The app has no telemetry and makes no other network requests.
+Files you open are sent to Claude for analysis, through Claude Code or directly to the Anthropic API depending on your configuration. Do not analyse files containing secrets or code you are not permitted to share with a third-party service. The app has no telemetry. The only other network requests are made in API mode: fetching the list of available models and, when *Automatic* model selection is chosen, a short request to Haiku that picks the model.
 
 ## Project structure
 

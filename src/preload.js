@@ -1,8 +1,11 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("api", {
+  getPrefs: () => ipcRenderer.sendSync("prefs:get"),
+  setPrefs: (p) => ipcRenderer.send("prefs:set", p),
   getSettings: () => ipcRenderer.invoke("settings:get"),
   setSettings: (p) => ipcRenderer.invoke("settings:set", p),
+  listModels: () => ipcRenderer.invoke("models:list"),
   openFile: () => ipcRenderer.invoke("file:open"),
   readFile: (p) => ipcRenderer.invoke("file:read", p),
   pathForFile: (f) => webUtils.getPathForFile(f),

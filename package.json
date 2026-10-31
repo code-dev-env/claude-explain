@@ -5,11 +5,14 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable"
+    "dist": "electron-builder --win nsis portable",
+    "dist:installer": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "rcedit": "^5.0.2"
   },
   "build": {
     "appId": "com.local.claudeexplain",
@@ -17,18 +20,29 @@
     "directories": {
       "output": "dist"
     },
+    "afterPack": "build/after-pack.js",
     "files": [
       "src/**/*",
       "build/icon.png",
       "package.json"
     ],
     "win": {
-      "target": "portable",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
+    "nsis": {
+      "artifactName": "Claude-Explain-Setup-${version}.exe",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
     "portable": {
-      "artifactName": "Claude-Explain.exe"
+      "artifactName": "Claude-Explain-Portable-${version}.exe"
     }
   }
 }

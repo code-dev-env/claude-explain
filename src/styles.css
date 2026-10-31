@@ -427,6 +427,18 @@ code {
   border-top-color: #f472b6;
   animation-duration: 0.8s;
 }
+.livepreview {
+  max-width: 520px;
+  margin: 0 auto 16px;
+  text-align: left;
+}
+.livepreview h3 {
+  margin: 0 0 4px;
+}
+.livepreview p {
+  margin: 6px 0 0;
+  color: var(--muted, inherit);
+}
 .stages {
   list-style: none;
   margin: 0 0 24px;
@@ -1375,6 +1387,11 @@ code {
   color: var(--muted);
   font-weight: 700;
 }
+.seg,
+.opts select {
+  box-sizing: border-box;
+  height: 42px;
+}
 .seg {
   display: flex;
   padding: 4px;
@@ -1387,7 +1404,7 @@ code {
   background: none;
   border: 0;
   color: var(--muted);
-  padding: 7px 16px;
+  padding: 0 16px;
   border-radius: 9px;
   cursor: pointer;
   font: inherit;

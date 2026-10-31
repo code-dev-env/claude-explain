@@ -3,18 +3,13 @@ const fmt = (s) =>
   esc(s)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+// UI preferences are saved in the settings JSON (via main), not localStorage, so a portable exe keeps them all in one file.
+const prefs = window.api.getPrefs() || {};
 const store = {
-  get: (k) => {
-    try {
-      return localStorage.getItem(k);
-    } catch {
-      return null;
-    }
-  },
+  get: (k) => prefs[k] ?? null,
   set: (k, v) => {
-    try {
-      localStorage.setItem(k, v);
-    } catch {}
+    prefs[k] = v;
+    window.api.setPrefs({ [k]: v });
   },
 };
 
@@ -92,7 +87,34 @@ const opts = {
   detail: ["beginner", "intermediate", "expert"].includes(store.get("detail"))
     ? store.get("detail")
     : "intermediate",
+  model: store.get("model") || "", // '' = Settings default, filled in by initModels()
 };
+
+/* ---------- model choice: list comes from main (live with an API key, else built-in) ---------- */
+const AUTO = "auto"; // "Automatic": Claude decides (handled in main.js)
+let models = [],
+  defaultModel = "";
+function fillModelSelect(sel, value) {
+  const list =
+    !value || value === AUTO || models.some((m) => m.id === value)
+      ? models
+      : [...models, { id: value, name: value }];
+  sel.replaceChildren(
+    new Option("Automatic (Claude decides)", AUTO),
+    ...list.map((m) => new Option(m.name, m.id)),
+  );
+  sel.value = value;
+}
+async function initModels() {
+  const [list, s] = await Promise.all([
+    window.api.listModels(),
+    window.api.getSettings(),
+  ]);
+  models = list;
+  defaultModel = s.model;
+  if (!opts.model) opts.model = defaultModel;
+  syncOpts();
+}
 const MODE_HINT = {
   full: "Full: complete walkthrough, all five diagram types and notes (about 15–25 s).",
   quick:
@@ -103,6 +125,7 @@ function syncOpts() {
     .querySelectorAll("#modeSeg button")
     .forEach((b) => b.classList.toggle("on", b.dataset.mode === opts.mode));
   $("landDetail").value = opts.detail;
+  fillModelSelect($("landModel"), opts.model);
   $("modeHint").textContent = MODE_HINT[opts.mode];
 }
 function setOpt(k, v) {
@@ -112,9 +135,11 @@ function setOpt(k, v) {
 }
 $("modeSeg").addEventListener("click", (e) => {
   const b = e.target.closest("button");
-  if (b) setOpt("mode", b.dataset.mode);
+  if (!b) return;
+  setOpt("mode", b.dataset.mode); // the chosen model is never changed behind the user's back
 });
 $("landDetail").onchange = (e) => setOpt("detail", e.target.value);
+$("landModel").onchange = (e) => setOpt("model", e.target.value);
 
 /* ---------- state ---------- */
 let file = null,
@@ -238,30 +263,75 @@ const fmtTok = (n) =>
         ? (n / 1000).toFixed(2) + "k"
         : String(n);
 
+let stageIdx = -2; // last rendered stage; -2 forces the first render
 function setStages(text) {
-  const seen = STAGES.map(([k]) => text.includes(k));
-  let last = seen.lastIndexOf(true);
+  let last = -1;
+  for (let i = STAGES.length - 1; i >= 0; i--)
+    if (text.includes(STAGES[i][0])) {
+      last = i;
+      break;
+    }
+  if (last === stageIdx) return;
+  stageIdx = last;
   $("stages").innerHTML = STAGES.map(([, label], i) => {
-    const cls =
-      i < last || (!running && i === last)
-        ? "done"
-        : i === last
-          ? "active"
-          : i === last + 1 && running
-            ? ""
-            : "";
     const state = i < last ? "done" : i === last ? "active" : "";
-    return `<li class="${state || cls}"><span class="s-ic">✓</span>${esc(label)}</li>`;
+    return `<li class="${state}"><span class="s-ic">✓</span>${esc(label)}</li>`;
   }).join("");
+}
+
+// Show title / tagline / overview as soon as they have streamed in.
+function jsonStr(text, key) {
+  const m = text.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`));
+  if (!m) return "";
+  let raw = m[1].replace(/\\$/, "");
+  try {
+    return JSON.parse(`"${raw}"`);
+  } catch {
+    return "";
+  }
+}
+function setLivePreview(text) {
+  const title = jsonStr(text, "title");
+  $("livePreview").hidden = !title;
+  if (!title) return;
+  $("lpTitle").textContent = title;
+  $("lpTag").textContent = jsonStr(text, "tagline");
+  $("lpOverview").textContent = jsonStr(text, "overview");
+}
+
+/* ---------- result cache: same file + options = instant repeat ---------- */
+const cache = new Map();
+function cacheKey() {
+  let h = 5381;
+  const c = file.content;
+  for (let i = 0; i < c.length; i++) h = ((h << 5) + h + c.charCodeAt(i)) | 0;
+  return [file.name, c.length, h, opts.mode, opts.detail, opts.model, currentAsk].join(
+    "|",
+  );
 }
 
 async function analyze() {
   running = true;
   result = null;
   lastStats = null;
+  const key = cacheKey();
+  const hit = cache.get(key);
+  if (hit) {
+    result = hit.result;
+    lastStats = {
+      elapsed: 0,
+      meta: { ...hit.meta, source: "cache" },
+      mode: opts.mode,
+      detail: opts.detail,
+    };
+    running = false;
+    return renderResult();
+  }
   const id = ++reqId;
   let text = "";
   streamedChars = 0;
+  stageIdx = -2;
+  $("livePreview").hidden = true;
   $("loadFile").textContent = file.name;
   $("fileName").textContent = file.name;
   $("fileLang").textContent = local.lang;
@@ -281,6 +351,9 @@ async function analyze() {
     {
       id,
       system: systemPrompt(),
+      model: opts.model,
+      mode: opts.mode,
+      detail: opts.detail,
       messages: [
         {
           role: "user",
@@ -292,6 +365,7 @@ async function analyze() {
       text += d;
       streamedChars += d.length;
       setStages(text);
+      setLivePreview(text);
     },
   );
 
@@ -315,6 +389,8 @@ async function analyze() {
     mode: opts.mode,
     detail: opts.detail,
   };
+  if (cache.size >= 20) cache.delete(cache.keys().next().value);
+  cache.set(key, { result, meta: lastStats.meta });
   renderResult();
 }
 
@@ -414,13 +490,19 @@ function renderResult() {
   setTab(currentAsk ? result.openTab : "overview");
 }
 
+let hlEls = []; // currently highlighted code lines
 function highlight(range) {
   if (!range) return;
   clearHighlight(true);
   const [a, b] = range,
     max = local.total;
-  for (let n = Math.max(1, a); n <= Math.min(b, max); n++)
-    $("L" + n)?.classList.add("hl");
+  for (let n = Math.max(1, a); n <= Math.min(b, max); n++) {
+    const el = $("L" + n);
+    if (el) {
+      el.classList.add("hl");
+      hlEls.push(el);
+    }
+  }
   $("L" + Math.min(Math.max(1, a), max))?.scrollIntoView({
     block: "center",
     behavior: "smooth",
@@ -428,7 +510,8 @@ function highlight(range) {
   $("clearHl").hidden = false;
 }
 function clearHighlight(keep) {
-  document.querySelectorAll(".ln.hl").forEach((e) => e.classList.remove("hl"));
+  hlEls.forEach((e) => e.classList.remove("hl"));
+  hlEls = [];
   if (!keep) $("clearHl").hidden = true;
 }
 $("clearHl").onclick = () => {
@@ -447,12 +530,11 @@ function setTab(tab) {
   document
     .querySelectorAll("#tabs button")
     .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  const html = {
-    overview: tabOverview,
-    walkthrough: tabWalkthrough,
-    diagrams: tabDiagrams,
-    components: tabComponents,
-  }[tab]();
+  // diagram layout is the only expensive tab; build it once per result
+  const html =
+    tab === "diagrams"
+      ? (result.diagramsHtml ??= tabDiagrams())
+      : { overview: tabOverview, walkthrough: tabWalkthrough, components: tabComponents }[tab]();
   $("tabBody").innerHTML = `<div class="tabpage">${html}</div>`;
   $("tabBody").scrollTop = 0;
   if (tab === "diagrams") fitAll();
@@ -674,6 +756,9 @@ function startNodeDrag(e) {
     ox = +(node.dataset.dx || 0),
     oy = +(node.dataset.dy || 0);
   let moved = false;
+  const nodes = new Map(
+    [...svg.querySelectorAll(".movable")].map((n) => [n.dataset.id, n]),
+  );
   const move = (ev) => {
     const ddx = ev.clientX - sx,
       ddy = ev.clientY - sy;
@@ -685,7 +770,7 @@ function startNodeDrag(e) {
       "transform",
       `translate(${node.dataset.dx},${node.dataset.dy})`,
     );
-    redrawEdges(svg, node.dataset.id);
+    redrawEdges(svg, node.dataset.id, nodes);
   };
   const up = () => {
     removeEventListener("mousemove", move);
@@ -703,16 +788,13 @@ function startNodeDrag(e) {
   addEventListener("mouseup", up);
   return true;
 }
-function redrawEdges(svg, id) {
+function redrawEdges(svg, id, nodes) {
   const box = (n) => ({
     x: +n.dataset.x + +(n.dataset.dx || 0),
     y: +n.dataset.y + +(n.dataset.dy || 0),
     w: +n.dataset.w,
     h: +n.dataset.h,
   });
-  const nodes = new Map(
-    [...svg.querySelectorAll(".movable")].map((n) => [n.dataset.id, n]),
-  );
   svg.querySelectorAll(".edge, .elabel").forEach((el) => {
     if (el.dataset.f !== id && el.dataset.t !== id) return;
     const a = nodes.get(el.dataset.f),
@@ -843,9 +925,10 @@ $("themeBtn").onclick = () => {
 
 async function openSettings() {
   const s = await window.api.getSettings();
+  if (!models.length) models = await window.api.listModels();
   $("keyInput").value = "";
   $("keyState").textContent = s.hasKey ? "(a key is saved)" : "(not set)";
-  $("modelInput").value = s.model;
+  fillModelSelect($("modelInput"), s.model);
   $("modeInput").value = s.mode;
   $("cliInput").value = s.cliPath;
   $("settingsModal").hidden = false;
@@ -856,13 +939,16 @@ $("settingsCancel").onclick = () => {
 };
 $("settingsSave").onclick = async () => {
   const patch = {
-    model: $("modelInput").value.trim() || "claude-sonnet-5-5",
+    model: $("modelInput").value || "claude-sonnet-5-5",
     mode: $("modeInput").value,
     cliPath: $("cliInput").value.trim(),
   };
   const key = $("keyInput").value.trim();
   if (key) patch.apiKey = key;
-  await window.api.setSettings(patch);
+  const s = await window.api.setSettings(patch);
+  defaultModel = s.model;
+  if (key) models = await window.api.listModels(); // key changed: refresh the live list
+  syncOpts();
   $("settingsModal").hidden = true;
 };
 addEventListener("keydown", (e) => {
@@ -889,3 +975,4 @@ $("resizer").addEventListener("mousedown", (e) => {
 
 syncOpts();
 showView("landing");
+initModels();
